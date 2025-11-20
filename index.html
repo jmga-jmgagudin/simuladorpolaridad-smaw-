@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio Virtual SMAW</title>
+    
+    <!-- 1. Cargar Tailwind CSS (Estilos) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Cargar React y ReactDOM (Motor de la app) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- 3. Cargar Babel (Para que el navegador entienda nuestro código React) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Animaciones personalizadas no incluidas en Tailwind */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
+        @keyframes ping {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans">
+    
+    <!-- Contenedor raíz donde React montará la aplicación -->
+    <div id="root"></div>
+
+    <!-- CÓDIGO DE LA APLICACIÓN -->
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- ICONOS SVG (Componentes simples) ---
+        const ZapIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>;
+        const InfoIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
+        const CheckCircleIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+        const WifiIcon = ({size}) => <svg width={size} height={size} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+        const ArrowRightIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>;
+
+        // --- COMPONENTE PRINCIPAL ---
+        const SMAWSimulator = () => {
+            const [polarity, setPolarity] = useState('DC_PLUS'); 
+            const [isWelding, setIsWelding] = useState(false);
+            const [amperage, setAmperage] = useState(100); 
+            const [animKey, setAnimKey] = useState(0);
+
+            useEffect(() => {
+                setAnimKey(prev => prev + 1);
+            }, [polarity, isWelding]); 
+
+            const polarityData = {
+                DC_PLUS: {
+                    title: "Polaridad Inversa (DC+)",
+                    sub: "Electrodo al Positivo (+)",
+                    heat: { electrode: 70, work: 30 },
+                    bead: "Estrecho / Profundo",
+                    electronFlow: "De la Pieza (-) al Electrodo (+)",
+                    stability: "Alta (Constante)",
+                    stabilityColor: "text-green-400"
+                },
+                DC_MINUS: {
+                    title: "Polaridad Directa (DC-)",
+                    sub: "Electrodo al Negativo (-)",
+                    heat: { electrode: 30, work: 70 },
+                    bead: "Ancho / Poco Profundo",
+                    electronFlow: "Del Electrodo (-) a la Pieza (+)",
+                    stability: "Media (Constante)",
+                    stabilityColor: "text-blue-400"
+                },
+                AC: {
+                    title: "Corriente Alterna (AC)",
+                    sub: "Sin polaridad fija",
+                    heat: { electrode: 50, work: 50 },
+                    bead: "Intermedio",
+                    electronFlow: "Oscilante (Cambia constantemente)",
+                    stability: "Variable (Paso por cero)",
+                    stabilityColor: "text-yellow-400"
+                }
+            };
+
+            const activeData = polarityData[polarity];
+
+            // Cálculos visuales
+            const speedFactor = polarity === 'AC' ? 1.2 : 1.0; 
+            const animDuration = `${(150 / amperage) * speedFactor}s`;
+            const ionDuration = `${(150 / amperage) * speedFactor * 2.5}s`; 
+            const arcScale = 0.8 + ((amperage - 60) / 100) * 0.6; 
+            const arcOpacity = 0.5 + ((amperage - 60) / 100) * 0.5;
+
+            const getHeatColor = (part) => {
+                if (!isWelding) return "url(#steel-gradient)"; 
+                const electrodeHeat = activeData.heat.electrode; 
+                if (part === 'electrode') {
+                    return electrodeHeat >= 70 ? "#fbbf24" : electrodeHeat === 50 ? "#f97316" : "#ef4444"; 
+                } else if (part === 'plate') {
+                    return electrodeHeat <= 30 ? "#fbbf24" : electrodeHeat === 50 ? "#f97316" : "#ef4444";
+                }
+                return "#64748b";
+            };
+
+            const getBeadPath = () => {
+                if (polarity === 'DC_PLUS') return "M -6 0 Q 0 28, 6 0"; 
+                else if (polarity === 'DC_MINUS') return "M -18 0 Q 0 10, 18 0";
+                else return "M -12 0 Q 0 18, 12 0";
+            };
+
+            // Sub-componentes visuales
+            const ElectronParticle = () => (
+                <g>
+                    <circle r="5" fill="url(#electron-gradient)" stroke="#b45309" strokeWidth="1" />
+                    <text x="0" y="3" textAnchor="middle" fill="#78350f" fontSize="9" fontWeight="bold">-</text>
+                </g>
+            );
+
+            const IonParticle = () => (
+                <g>
+                    <circle r="8" fill="url(#ion-gradient)" stroke="#0369a1" strokeWidth="1" />
+                    <text x="0" y="4" textAnchor="middle" fill="#0c4a6e" fontSize="11" fontWeight="bold">+</text>
+                </g>
+            );
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-100 p-2 sm:p-4 font-sans">
+                <header className="max-w-5xl mx-auto mb-6 border-b border-slate-700 pb-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400 flex flex-wrap items-center gap-3">
+                    <ZapIcon /> Simulador de Polaridad SMAW
+                    </h1>
+                </header>
+
+                <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    {/* BARRA LATERAL: CONTROLES */}
+                    <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
+                    <div className="bg-slate-800 p-4 sm:p-5 rounded-xl border border-slate-700 shadow-lg space-y-6">
+                        
+                        {/* 1. POLARIDAD */}
+                        <div>
+                        <h2 className="text-sm font-bold text-slate-400 uppercase mb-3 tracking-wider">1. Seleccionar Polaridad</h2>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => { setPolarity('DC_PLUS'); setIsWelding(false); }} className={`p-3 rounded-lg text-left border transition-all flex justify-between items-center ${polarity === 'DC_PLUS' ? 'bg-red-900/30 border-red-500' : 'bg-slate-700 border-transparent hover:bg-slate-600'}`}>
+                            <span className="font-bold text-white">Inversa</span>
+                            <span className="text-xs px-2 py-1 rounded bg-slate-900 text-red-400 font-mono font-bold border border-red-500/30">DC+</span>
+                            </button>
+                            <button onClick={() => { setPolarity('DC_MINUS'); setIsWelding(false); }} className={`p-3 rounded-lg text-left border transition-all flex justify-between items-center ${polarity === 'DC_MINUS' ? 'bg-blue-900/30 border-blue-500' : 'bg-slate-700 border-transparent hover:bg-slate-600'}`}>
+                            <span className="font-bold text-white">Directa</span>
+                            <span className="text-xs px-2 py-1 rounded bg-slate-900 text-blue-400 font-mono font-bold border border-blue-500/30">DC-</span>
+                            </button>
+                            <button onClick={() => { setPolarity('AC'); setIsWelding(false); }} className={`p-3 rounded-lg text-left border transition-all flex justify-between items-center ${polarity === 'AC' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-700 border-transparent hover:bg-slate-600'}`}>
+                            <span className="font-bold text-white">Alterna</span>
+                            <span className="text-xs px-2 py-1 rounded bg-slate-900 text-purple-400 font-mono font-bold border border-purple-500/30">AC</span>
+                            </button>
+                        </div>
+                        </div>
+
+                        {/* 2. INTENSIDAD */}
+                        <div>
+                        <h2 className="text-sm font-bold text-slate-400 uppercase mb-3 tracking-wider flex justify-between">
+                            <span>2. Intensidad</span>
+                            <span className="text-yellow-400 font-mono">{amperage} A</span>
+                        </h2>
+                        <input type="range" min="60" max="160" step="5" value={amperage} onChange={(e) => setAmperage(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"/>
+                        </div>
+
+                        {/* 3. BALANCE ENERGÉTICO */}
+                        <div className="pt-4 border-t border-slate-600">
+                        <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                            <InfoIcon className="text-blue-400" /> Balance Energético
+                        </h2>
+                        <div className="space-y-4 text-xs sm:text-sm">
+                            <div>
+                                <div className="h-6 w-full bg-slate-900 rounded-full overflow-hidden flex border border-slate-600 relative">
+                                <div style={{ width: `${activeData.heat.electrode}%` }} className="h-full bg-yellow-500 flex items-center justify-center text-[10px] text-black font-bold transition-all duration-500"></div>
+                                <div style={{ width: `${activeData.heat.work}%` }} className="h-full bg-red-600 flex items-center justify-center text-[10px] text-white font-bold transition-all duration-500"></div>
+                                <div className="absolute inset-0 flex justify-between px-2 items-center text-[10px] font-bold pointer-events-none">
+                                    <span className="text-black drop-shadow-sm">{activeData.heat.electrode}% Electrodo</span>
+                                    <span className="text-white drop-shadow-md">{activeData.heat.work}% Pieza</span>
+                                </div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 bg-slate-900/50 p-3 rounded-lg">
+                                <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Cordón de Soldadura</span>
+                                    <div className="text-white font-medium flex items-center gap-2">
+                                    <CheckCircleIcon className="text-green-400" /> {activeData.bead}
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Estabilidad del Arco</span>
+                                    <div className={`font-medium flex items-center gap-2 ${activeData.stabilityColor}`}>
+                                    <WifiIcon size={12} /> {activeData.stability}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+
+                        <button onClick={() => setIsWelding(!isWelding)} className={`w-full py-3 font-bold text-lg rounded shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 ${isWelding ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'}`}>
+                        {isWelding ? 'CORTAR ARCO' : 'CEBAR ELECTRODO'}
+                        </button>
+                    </div>
+                    </div>
+
+                    {/* VISUALIZACIÓN */}
+                    <div className="lg:col-span-2 order-1 lg:order-2">
+                    <div className={`bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-slate-700 p-2 sm:p-4 relative overflow-hidden h-[500px] flex items-center justify-center shadow-2xl transition-colors duration-1000 ${isWelding ? 'brightness-75' : ''}`}>
+                        
+                        {isWelding && <div className="absolute inset-0 bg-blue-400/5 animate-pulse z-0 pointer-events-none"></div>}
+
+                        {/* LEYENDA: Derecha */}
+                        <div className="absolute top-4 right-4 bg-slate-900/90 border border-slate-600 p-3 rounded-lg shadow-xl z-20 pointer-events-none">
+                        <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-2 border-b border-slate-700 pb-1">Leyenda</h4>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <svg width="14" height="14" viewBox="0 0 16 16">
+                                <circle cx="8" cy="8" r="5" fill="url(#electron-gradient)" stroke="#b45309" strokeWidth="1" />
+                                <text x="8" y="11" textAnchor="middle" fill="#78350f" fontSize="8" fontWeight="bold">-</text>
+                                </svg>
+                                <span className="text-xs text-yellow-100">Electrón (Rápido)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <svg width="14" height="14" viewBox="0 0 16 16">
+                                <circle cx="8" cy="8" r="6" fill="url(#ion-gradient)" stroke="#0369a1" strokeWidth="1" />
+                                <text x="8" y="12" textAnchor="middle" fill="#0c4a6e" fontSize="10" fontWeight="bold">+</text>
+                                </svg>
+                                <span className="text-xs text-cyan-100">Ión Positivo (Lento)</span>
+                            </div>
+                        </div>
+                        </div>
+
+                        <svg viewBox="0 0 450 280" className="w-full h-full z-10 select-none">
+                        <defs>
+                            <linearGradient id="metal-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#475569" />
+                                <stop offset="50%" stopColor="#334155" />
+                                <stop offset="100%" stopColor="#1e293b" />
+                            </linearGradient>
+                            <linearGradient id="machine-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#334155" />
+                                <stop offset="100%" stopColor="#0f172a" />
+                            </linearGradient>
+                            <linearGradient id="steel-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#94a3b8" />
+                                <stop offset="50%" stopColor="#64748b" />
+                                <stop offset="100%" stopColor="#475569" />
+                            </linearGradient>
+                            <linearGradient id="electron-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#fbbf24" />
+                                <stop offset="100%" stopColor="#d97706" />
+                            </linearGradient>
+                            <linearGradient id="ion-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#38bdf8" />
+                                <stop offset="100%" stopColor="#0284c7" />
+                            </linearGradient>
+                            
+                            {/* FILTROS */}
+                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="4" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                            <filter id="intense-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="6" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                            <filter id="heat-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 0.5 0 0 0  0 0 0 0 0  0 0 0 1 0" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+
+                        {/* --- ANIMACIÓN DIDÁCTICA: IONIZACIÓN (CENTRADA ARRIBA) --- */}
+                        <g transform="translate(225, 35)">
+                            {/* PLASMA LABEL */}
+                            {isWelding && (
+                                <text x="0" y="-25" textAnchor="middle" fontSize="9" fontWeight="900" letterSpacing="1" className="animate-pulse">
+                                <tspan fill="#38bdf8">PLASMA</tspan> <tspan fill="#fbbf24" dx="2">(4º ESTADO)</tspan>
+                                </text>
+                            )}
+
+                            <text x="0" y="-15" textAnchor="middle" fill="#94a3b8" fontSize="8" fontWeight="bold" letterSpacing="0.5">TEORÍA: IONIZACIÓN</text>
+                            
+                            <rect x="-50" y="-20" width="100" height="45" rx="4" fill="none" stroke="#334155" strokeDasharray="2,2" />
+
+                            {isWelding ? (
+                            <g>
+                                {/* NÚCLEO / IÓN */}
+                                <circle r="6" fill="url(#ion-gradient)" stroke="#0369a1" strokeWidth="1" cy="5">
+                                    <animateTransform attributeName="transform" type="translate" values="-1 5; 1 5; -1 5" dur="0.2s" repeatCount="indefinite" />
+                                </circle>
+                                <text x="0" y="8" textAnchor="middle" fill="#0c4a6e" fontSize="8" fontWeight="bold">+</text>
+                                
+                                {/* ELECTRÓN LIBERADO */}
+                                <g transform="translate(0, 5)">
+                                <circle r="3" fill="url(#electron-gradient)" stroke="#b45309" strokeWidth="1" />
+                                <animateMotion 
+                                    path="M 0 0 m -10 0 a 10 10 0 1 0 20 0 a 10 10 0 1 0 -20 0 M 0 0 L 40 -5" 
+                                    dur="2s" 
+                                    repeatCount="indefinite" 
+                                    keyPoints="0;0.8; 0.8; 1"
+                                    keyTimes="0; 0.8; 0.8; 1"
+                                    calcMode="linear"
+                                />
+                                <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.9;0.95;1" dur="2s" repeatCount="indefinite" />
+                                </g>
+                                <text x="0" y="20" textAnchor="middle" fill="#fbbf24" fontSize="6">Separación por Calor</text>
+                                <text x="0" y="27" textAnchor="middle" fill="#fbbf24" fontSize="6" fontStyle="italic">(Cebado del Electrodo)</text>
+                            </g>
+                            ) : (
+                            <g transform="translate(0, 5)">
+                                {/* ÁTOMO NEUTRO */}
+                                <circle r="6" fill="url(#ion-gradient)" stroke="#0369a1" strokeWidth="1" />
+                                <text x="0" y="3" textAnchor="middle" fill="#0c4a6e" fontSize="8" fontWeight="bold">+</text>
+                                <g>
+                                    <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="1.5s" repeatCount="indefinite" />
+                                    <circle cx="9" cy="0" r="2.5" fill="url(#electron-gradient)" stroke="#b45309" strokeWidth="0.5" />
+                                </g>
+                                <text x="0" y="20" textAnchor="middle" fill="#94a3b8" fontSize="7">Átomo Neutro</text>
+                            </g>
+                            )}
+                        </g>
+
+                        {/* MÁQUINA */}
+                        <rect x="20" y="50" width="140" height="160" rx="8" fill="url(#machine-gradient)" stroke="#475569" strokeWidth="2" />
+                        <rect x="45" y="110" width="90" height="40" rx="4" fill="#1e293b" stroke="#0f172a" strokeWidth="1" />
+                        <text x="90" y="130" textAnchor="middle" fill="#38bdf8" fontSize="16" fontWeight="bold" fontFamily="monospace" filter="url(#glow)">
+                            {polarity === 'AC' ? 'AC' : polarity === 'DC_PLUS' ? 'DC+' : 'DC-'}
+                        </text>
+                        <text x="90" y="145" textAnchor="middle" fill="#facc15" fontSize="14" fontWeight="bold" fontFamily="monospace">
+                            {amperage} A
+                        </text>
+                        <text x="90" y="225" textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="900" letterSpacing="0.5">FUENTE DE ENERGÍA</text>
+                        <text x="90" y="240" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="bold" letterSpacing="0.5">
+                            {polarity === 'AC' ? 'TRANSFORMADOR' : 'TRANSFORMADOR'}
+                        </text>
+                        {polarity !== 'AC' && (
+                            <text x="90" y="252" textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="bold" letterSpacing="0.5">RECTIFICADOR</text>
+                        )}
+
+                        {/* BORNES */}
+                        <circle cx="160" cy="80" r="12" fill="#0f172a" stroke="#cbd5e1" strokeWidth="2" />
+                        <circle cx="160" cy="180" r="12" fill="#0f172a" stroke="#cbd5e1" strokeWidth="2" />
+                        <circle cx="160" cy="80" r="8" fill={polarity === 'DC_PLUS' ? '#ef4444' : polarity === 'DC_MINUS' ? '#3b82f6' : '#a855f7'} />
+                        <circle cx="160" cy="180" r="8" fill={polarity === 'DC_PLUS' ? '#3b82f6' : polarity === 'DC_MINUS' ? '#ef4444' : '#a855f7'} />
+
+                        {/* SIGNOS */}
+                        <g transform="translate(125, 85)">
+                            <rect x="-12" y="-15" width="24" height="24" rx="4" fill="#1e293b" stroke="#475569" />
+                            <text x="0" y="5" textAnchor="middle" fill="#ffffff" fontSize="20" fontWeight="900">
+                            {polarity === 'AC' ? '~' : polarity === 'DC_PLUS' ? '+' : '-'}
+                            </text>
+                        </g>
+                        <g transform="translate(125, 185)">
+                            <rect x="-12" y="-15" width="24" height="24" rx="4" fill="#1e293b" stroke="#475569" />
+                            <text x="0" y="5" textAnchor="middle" fill="#ffffff" fontSize="20" fontWeight="900">
+                            {polarity === 'AC' ? '~' : polarity === 'DC_PLUS' ? '-' : '+'}
+                            </text>
+                        </g>
+
+                        {/* CABLES */}
+                        <path d="M160 80 C 220 80, 240 90, 290 90" stroke={polarity === 'DC_PLUS' ? '#ef4444' : polarity === 'DC_MINUS' ? '#3b82f6' : '#a855f7'} strokeWidth="6" fill="none" />
+                        <path d="M160 180 C 220 180, 230 220, 290 220" stroke={polarity === 'DC_PLUS' ? '#3b82f6' : polarity === 'DC_MINUS' ? '#ef4444' : '#a855f7'} strokeWidth="6" fill="none" />
+
+                        {/* HERRAMIENTA + PIEZA */}
+                        <g transform="translate(290, 80)">
+                            <rect x="0" y="0" width="70" height="18" fill="#f59e0b" rx="3" stroke="#78350f" /> 
+                            <rect x="70" y="5" width="8" height="25" fill="#64748b" stroke="#334155" /> 
+                            <rect x="50" y="25" width="6" height="100" fill={getHeatColor('electrode')} stroke={isWelding ? "none" : "#475569"} transform="rotate(-15 50 25)" className="transition-colors duration-1000" />
+                            {isWelding && <g transform="translate(0, -20)"><text x="0" y="0" fill={getHeatColor('electrode')} fontSize="12" fontWeight="bold" filter="url(#glow)">{activeData.heat.electrode}% Calor</text></g>}
+                        </g>
+
+                        <rect x="260" y="210" width="180" height="25" fill="url(#steel-gradient)" stroke="#334155" strokeWidth="2" />
+                        <g transform="translate(290, 210)">
+                            <path d="M-10 0 L -10 15 L 10 10" stroke="#cbd5e1" strokeWidth="4" fill="none" />
+                            <circle cx="-10" cy="10" r="4" fill="#ef4444" />
+                        </g>
+                        {isWelding && <text x="350" y="230" fill={getHeatColor('plate')} fontSize="12" fontWeight="bold" textAnchor="middle" filter="url(#glow)">{activeData.heat.work}% Calor</text>}
+
+                        {/* ARCO + CORDÓN + CHISPAS */}
+                        <g transform="translate(366, 210)"> 
+                            {isWelding && (
+                            <g style={{ transform: `scale(${arcScale})` }}>
+                                {/* ARCO */}
+                                <path d="M 0 -8 L 6 0 L -6 0 Z" fill={amperage > 130 ? "#eff6ff" : "#e0f2fe"} className="animate-pulse" filter={amperage > 120 ? "url(#intense-glow)" : "url(#glow)"} />
+                                <circle cx="0" cy="0" r="10" fill="#3b82f6" opacity={arcOpacity} className="animate-ping" />
+                                
+                                {/* CHISPAS (Partículas Aleatorias) */}
+                                {[0, 1, 2].map(i => (
+                                    <circle key={`spark-${i}`} r="1" fill="#fbbf24">
+                                    <animateMotion path={`M 0 -5 q ${Math.random()*20-10} -20 ${Math.random()*40-20} -10`} dur={`${0.3 + Math.random()*0.3}s`} repeatCount="indefinite" begin={`-${Math.random()}s`} />
+                                    <animate attributeName="opacity" values="1;0" dur="0.4s" repeatCount="indefinite" />
+                                    </circle>
+                                ))}
+
+                                {/* BAÑO DE FUSIÓN */}
+                                <path d={getBeadPath()} fill={getHeatColor('plate')} opacity="0.9" filter="url(#heat-glow)" className="transition-all duration-500" />
+                            </g>
+                            )}
+                        </g>
+
+                        {/* ANIMACIÓN DE FLUJO */}
+                        {isWelding && (
+                            <g key={animKey}>
+                            {[0, 1, 2].map(i => (
+                                <g key={`top-${i}`}>
+                                <ElectronParticle />
+                                <animateMotion dur={polarity === 'AC' ? `${parseFloat(animDuration)*1.2}s` : animDuration} repeatCount="indefinite" path="M160 80 C 220 80, 240 90, 290 90" keyPoints={polarity === 'DC_MINUS' ? "0;1" : polarity === 'DC_PLUS' ? "1;0" : "0;1;0"} keyTimes={polarity === 'AC' ? "0;0.5;1" : "0;1"} calcMode={polarity === 'AC' ? "spline" : "linear"} keySplines={polarity === 'AC' ? "0.4 0 0.6 1; 0.4 0 0.6 1" : undefined} begin={`-${i * (parseFloat(animDuration)/3)}s`} />
+                                </g>
+                            ))}
+                            {[0, 1, 2].map(i => (
+                                <g key={`bot-${i}`}>
+                                <ElectronParticle />
+                                <animateMotion dur={polarity === 'AC' ? `${parseFloat(animDuration)*1.2}s` : animDuration} repeatCount="indefinite" path="M160 180 C 220 180, 230 220, 290 220" keyPoints={polarity === 'DC_MINUS' ? "1;0" : polarity === 'DC_PLUS' ? "0;1" : "0;1;0"} keyTimes={polarity === 'AC' ? "0;0.5;1" : "0;1"} calcMode={polarity === 'AC' ? "spline" : "linear"} keySplines={polarity === 'AC' ? "0.4 0 0.6 1; 0.4 0 0.6 1" : undefined} begin={`-${i * (parseFloat(animDuration)/3)}s`} />
+                                </g>
+                            ))}
+                            {[0, 1].map(i => (
+                                <g key={`ion-${i}`} transform="translate(366, 210)"> 
+                                <g>
+                                    <IonParticle />
+                                    <animateMotion dur={polarity === 'AC' ? `${parseFloat(ionDuration)*1.2}s` : ionDuration} repeatCount="indefinite" path="M 0 -8 L 0 0" keyPoints={polarity === 'DC_MINUS' ? "0;1" : polarity === 'DC_PLUS' ? "1;0" : "0;1;0"} keyTimes={polarity === 'AC' ? "0;0.5;1" : "0;1"} calcMode={polarity === 'AC' ? "spline" : "linear"} keySplines={polarity === 'AC' ? "0.4 0 0.6 1; 0.4 0 0.6 1" : undefined} begin={`-${i * (parseFloat(ionDuration)/2)}s`} />
+                                    <animate attributeName="opacity" values="0;1;1;0" dur={ionDuration} repeatCount="indefinite" />
+                                </g>
+                                </g>
+                            ))}
+                            </g>
+                        )}
+                        </svg>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        // --- INICIALIZACIÓN DE REACT ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SMAWSimulator />);
+    </script>
+</body>
+</html>
